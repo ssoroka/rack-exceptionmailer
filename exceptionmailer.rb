@@ -1,4 +1,4 @@
-require 'pony'
+require 'mail'
 require 'erb'
 
 module Rack
@@ -22,7 +22,7 @@ module Rack
           begin
             send_notification boom, env
           rescue
-            # just ignore it. we only care about the initial exception
+            Rails.logger.try(:error, "#{$!.class.name}: #{$!.message} in exceptionmailer.rb:#{__LINE__}")
           end
           
           raise
@@ -32,14 +32,23 @@ module Rack
     end
     
     def send_notification(exception, env)
-      body = @template.result(binding) # not sure about this (binding) thing
-      html_body = @html_template.result(binding)
+      @body = @template.result(binding) # not sure about this (binding) thing
+      @html_body = @html_template.result(binding)
       
-      # loop through each :to address and fire off an email with the error
-      @to.each do |to|
-        Pony.mail :to => to, :from => @from, :subject  => @subject, :body => body, :html_body => html_body
+      mail = Mail.new do
+        to @to
+        from @from
+        subject @subject
       end
-      
+      mail.text_part = Mail::Part.new do
+        content_type 'text/plain'
+        body @body
+      end
+      mail.html_part = Mail::Part.new do
+        content_type 'text/html'
+        body @html_body
+      end
+      mail.deliver
     end
     
     def extract_body(env)
